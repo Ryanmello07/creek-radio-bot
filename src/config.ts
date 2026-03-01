@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import path from 'path';
 
 function requireEnv(key: string): string {
   const value = process.env[key];
@@ -20,10 +19,10 @@ export const config = {
     guildId: optionalEnv('DISCORD_GUILD_ID'),
   },
   supabase: {
-    url: requireEnv('SUPABASE_URL'),
-    serviceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
+    url: optionalEnv('SUPABASE_URL') ?? optionalEnv('VITE_SUPABASE_URL') ?? '',
+    serviceRoleKey: optionalEnv('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   },
   audio: {
-    filePath: path.resolve(process.cwd(), process.env['MUSIC_FILE_PATH'] ?? 'music/radio.mp3'),
+    streamUrl: requireEnv('AUDIO_STREAM_URL'),
   },
 };

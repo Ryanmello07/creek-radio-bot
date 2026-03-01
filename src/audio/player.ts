@@ -3,43 +3,62 @@ import {
   createAudioResource,
   AudioPlayer,
   AudioPlayerStatus,
-  AudioResource,
+  StreamType,
   NoSubscriberBehavior,
 } from '@discordjs/voice';
-import fs from 'fs';
+import https from 'https';
+import http from 'http';
+import { IncomingMessage } from 'http';
 import { config } from '../config';
 import { logger } from '../logger';
 
-function createResource(): AudioResource {
-  if (!fs.existsSync(config.audio.filePath)) {
-    throw new Error(`Music file not found at path: ${config.audio.filePath}`);
-  }
-  return createAudioResource(config.audio.filePath);
+function fetchStream(url: string): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(url, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchStream(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+        reject(new Error(`HTTP ${res.statusCode ?? 'unknown'} fetching audio stream`));
+        return;
+      }
+      resolve(res);
+    });
+    req.on('error', reject);
+  });
 }
 
-export function createLoopingPlayer(guildId: string): AudioPlayer {
+export async function createLoopingPlayer(guildId: string): Promise<AudioPlayer> {
   const player = createAudioPlayer({
     behaviors: {
       noSubscriber: NoSubscriberBehavior.Pause,
     },
   });
 
-  function play(): void {
-    const resource = createResource();
-    player.play(resource);
+  async function play(): Promise<void> {
+    try {
+      const stream = await fetchStream(config.audio.streamUrl);
+      const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+      player.play(resource);
+    } catch (err) {
+      logger.error(`guild:${guildId}`, 'Failed to fetch audio stream — retrying in 3s', err);
+      setTimeout(() => void play(), 3000);
+    }
   }
 
   player.on(AudioPlayerStatus.Idle, () => {
     logger.debug(`guild:${guildId}`, 'Track ended — restarting loop');
-    play();
+    void play();
   });
 
   player.on('error', (err) => {
-    logger.error(`guild:${guildId}`, 'Audio player error', err);
-    play();
+    logger.error(`guild:${guildId}`, 'Audio player error — restarting', err);
+    void play();
   });
 
-  play();
+  await play();
 
   return player;
 }

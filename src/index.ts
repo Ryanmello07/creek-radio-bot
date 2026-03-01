@@ -12,7 +12,7 @@ const client = new Client({
 client.once(Events.ClientReady, (readyClient) => {
   logger.info('Bot', `Logged in as ${readyClient.user.tag}`);
   logger.info('Bot', `Serving ${readyClient.guilds.cache.size} guild(s)`);
-  logger.info('Bot', `Music file: ${config.audio.filePath}`);
+  logger.info('Bot', `Stream URL: ${config.audio.streamUrl}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {

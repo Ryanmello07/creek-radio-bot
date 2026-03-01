@@ -47,7 +47,7 @@ export async function connect(channel: VoiceBasedChannel): Promise<void> {
     throw new Error('Timed out while connecting to the voice channel. Please try again.');
   }
 
-  const player = createLoopingPlayer(guildId);
+  const player = await createLoopingPlayer(guildId);
   connection.subscribe(player);
 
   const sessionId = await createSession(guildId, channelId, channelName);

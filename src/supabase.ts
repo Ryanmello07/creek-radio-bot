@@ -1,12 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { config } from './config';
 
-export const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
+function buildClient(): SupabaseClient | null {
+  if (!config.supabase.url || !config.supabase.serviceRoleKey) {
+    console.warn('[Supabase] No service role key set — session logging is disabled');
+    return null;
+  }
+  return createClient(config.supabase.url, config.supabase.serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+const supabase = buildClient();
 
 export interface BotSession {
   id: string;
@@ -32,6 +37,8 @@ export async function createSession(
   channelId: string,
   channelName: string
 ): Promise<string | null> {
+  if (!supabase) return null;
+
   const { data, error } = await supabase
     .from('bot_sessions')
     .insert({ guild_id: guildId, channel_id: channelId, channel_name: channelName })
@@ -47,6 +54,8 @@ export async function createSession(
 }
 
 export async function closeSession(sessionId: string): Promise<void> {
+  if (!supabase) return;
+
   const { error } = await supabase
     .from('bot_sessions')
     .update({ is_active: false, left_at: new Date().toISOString() })
@@ -58,6 +67,8 @@ export async function closeSession(sessionId: string): Promise<void> {
 }
 
 export async function closeAllGuildSessions(guildId: string): Promise<void> {
+  if (!supabase) return;
+
   const { error } = await supabase
     .from('bot_sessions')
     .update({ is_active: false, left_at: new Date().toISOString() })
@@ -75,6 +86,8 @@ export async function logEvent(
   message: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
+  if (!supabase) return;
+
   const { error } = await supabase.from('bot_events').insert({
     guild_id: guildId,
     event_type: eventType,
