@@ -29,7 +29,13 @@ async function execute(interaction) {
         });
         return;
     }
-    await interaction.deferReply();
+    try {
+        await interaction.deferReply();
+    }
+    catch (err) {
+        logger_1.logger.warn(`guild:${interaction.guildId}`, 'Interaction expired before deferring /join');
+        return;
+    }
     try {
         await (0, connectionManager_1.connect)(voiceChannel);
         await logger_1.logger.event(interaction.guildId, 'join', `Joined ${voiceChannel.name}`, {

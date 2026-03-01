@@ -30,13 +30,23 @@ client.on(discord_js_1.Events.InteractionCreate, async (interaction) => {
         await command.execute(interaction);
     }
     catch (err) {
+        const errCode = err.code;
+        if (errCode === 10062) {
+            logger_1.logger.warn('Bot', `Interaction expired before responding to /${interaction.commandName}`);
+            return;
+        }
         logger_1.logger.error('Bot', `Error executing /${interaction.commandName}`, err);
         const reply = { content: 'Something went wrong. Please try again.', ephemeral: true };
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(reply);
+        try {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(reply);
+            }
+            else {
+                await interaction.reply(reply);
+            }
         }
-        else {
-            await interaction.reply(reply);
+        catch (replyErr) {
+            logger_1.logger.error('Bot', `Failed to send error reply for /${interaction.commandName}`, replyErr);
         }
     }
 });

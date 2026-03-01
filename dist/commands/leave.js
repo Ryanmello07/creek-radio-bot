@@ -20,7 +20,13 @@ async function execute(interaction) {
         });
         return;
     }
-    await interaction.deferReply();
+    try {
+        await interaction.deferReply();
+    }
+    catch (err) {
+        logger_1.logger.warn(`guild:${interaction.guildId}`, 'Interaction expired before deferring /leave');
+        return;
+    }
     try {
         await (0, connectionManager_1.disconnect)(interaction.guildId);
         await logger_1.logger.event(interaction.guildId, 'leave', 'Left voice channel', {
