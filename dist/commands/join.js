@@ -13,6 +13,7 @@ async function execute(interaction) {
         await interaction.reply({ content: 'This command can only be used inside a server.', ephemeral: true });
         return;
     }
+    const guildId = interaction.guildId;
     const member = interaction.member;
     const voiceChannel = member.voice.channel;
     if (!voiceChannel) {
@@ -22,7 +23,7 @@ async function execute(interaction) {
         });
         return;
     }
-    if ((0, connectionManager_1.isConnected)(interaction.guildId)) {
+    if ((0, connectionManager_1.isConnected)(guildId)) {
         await interaction.reply({
             content: 'The radio is already playing in a voice channel. Use `/leave` to stop it first.',
             ephemeral: true,
@@ -33,12 +34,14 @@ async function execute(interaction) {
         await interaction.deferReply();
     }
     catch (err) {
-        logger_1.logger.warn(`guild:${interaction.guildId}`, 'Interaction expired before deferring /join');
-        return;
+        const code = err.code;
+        if (code !== 40060) {
+            throw err;
+        }
     }
     try {
         await (0, connectionManager_1.connect)(voiceChannel);
-        await logger_1.logger.event(interaction.guildId, 'join', `Joined ${voiceChannel.name}`, {
+        await logger_1.logger.event(guildId, 'join', `Joined ${voiceChannel.name}`, {
             channel_id: voiceChannel.id,
             requested_by: interaction.user.tag,
         });
@@ -46,7 +49,7 @@ async function execute(interaction) {
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-        logger_1.logger.error(`guild:${interaction.guildId}`, 'Failed to join voice channel', err);
+        logger_1.logger.error(`guild:${guildId}`, 'Failed to join voice channel', err);
         await interaction.editReply(`Failed to join: ${message}`);
     }
 }

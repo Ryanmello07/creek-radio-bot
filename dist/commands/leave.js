@@ -13,7 +13,8 @@ async function execute(interaction) {
         await interaction.reply({ content: 'This command can only be used inside a server.', ephemeral: true });
         return;
     }
-    if (!(0, connectionManager_1.isConnected)(interaction.guildId)) {
+    const guildId = interaction.guildId;
+    if (!(0, connectionManager_1.isConnected)(guildId)) {
         await interaction.reply({
             content: 'The radio is not currently playing in any voice channel.',
             ephemeral: true,
@@ -24,19 +25,21 @@ async function execute(interaction) {
         await interaction.deferReply();
     }
     catch (err) {
-        logger_1.logger.warn(`guild:${interaction.guildId}`, 'Interaction expired before deferring /leave');
-        return;
+        const code = err.code;
+        if (code !== 40060) {
+            throw err;
+        }
     }
     try {
-        await (0, connectionManager_1.disconnect)(interaction.guildId);
-        await logger_1.logger.event(interaction.guildId, 'leave', 'Left voice channel', {
+        await (0, connectionManager_1.disconnect)(guildId);
+        await logger_1.logger.event(guildId, 'leave', 'Left voice channel', {
             requested_by: interaction.user.tag,
         });
         await interaction.editReply('Radio stopped. Goodbye!');
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-        logger_1.logger.error(`guild:${interaction.guildId}`, 'Failed to leave voice channel', err);
+        logger_1.logger.error(`guild:${guildId}`, 'Failed to leave voice channel', err);
         await interaction.editReply(`Failed to leave: ${message}`);
     }
 }
