@@ -35,9 +35,11 @@ async function execute(interaction) {
     }
     catch (err) {
         const code = err.code;
-        if (code !== 40060) {
-            throw err;
+        if (code === 10062) {
+            logger_1.logger.warn(`guild:${guildId}`, 'Interaction expired before deferring /join');
+            return;
         }
+        logger_1.logger.warn(`guild:${guildId}`, `deferReply failed for /join, attempting to continue: ${err instanceof Error ? err.message : err}`);
     }
     try {
         await (0, connectionManager_1.connect)(voiceChannel);
@@ -45,12 +47,22 @@ async function execute(interaction) {
             channel_id: voiceChannel.id,
             requested_by: interaction.user.tag,
         });
-        await interaction.editReply(`Radio is now streaming in **${voiceChannel.name}**. Use \`/leave\` to stop.`);
+        try {
+            await interaction.editReply(`Radio is now streaming in **${voiceChannel.name}**. Use \`/leave\` to stop.`);
+        }
+        catch (replyErr) {
+            logger_1.logger.warn(`guild:${guildId}`, `Failed to send success reply for /join: ${replyErr instanceof Error ? replyErr.message : replyErr}`);
+        }
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
         logger_1.logger.error(`guild:${guildId}`, 'Failed to join voice channel', err);
-        await interaction.editReply(`Failed to join: ${message}`);
+        try {
+            await interaction.editReply(`Failed to join: ${message}`);
+        }
+        catch (replyErr) {
+            logger_1.logger.warn(`guild:${guildId}`, `Failed to send error reply for /join: ${replyErr instanceof Error ? replyErr.message : replyErr}`);
+        }
     }
 }
 //# sourceMappingURL=join.js.map
