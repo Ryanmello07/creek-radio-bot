@@ -20,7 +20,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await interaction.deferReply();
+  try {
+    await interaction.deferReply();
+  } catch (err) {
+    logger.warn(`guild:${interaction.guildId}`, 'Interaction expired before deferring /leave');
+    return;
+  }
 
   try {
     await disconnect(interaction.guildId);

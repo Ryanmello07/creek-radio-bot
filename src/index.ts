@@ -32,12 +32,21 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   try {
     await command.execute(interaction as ChatInputCommandInteraction);
   } catch (err) {
+    const errCode = (err as { code?: number }).code;
+    if (errCode === 10062) {
+      logger.warn('Bot', `Interaction expired before responding to /${interaction.commandName}`);
+      return;
+    }
     logger.error('Bot', `Error executing /${interaction.commandName}`, err);
     const reply = { content: 'Something went wrong. Please try again.', ephemeral: true };
-    if (interaction.replied || interaction.deferred) {
-      await (interaction as ChatInputCommandInteraction).followUp(reply);
-    } else {
-      await (interaction as ChatInputCommandInteraction).reply(reply);
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await (interaction as ChatInputCommandInteraction).followUp(reply);
+      } else {
+        await (interaction as ChatInputCommandInteraction).reply(reply);
+      }
+    } catch (replyErr) {
+      logger.error('Bot', `Failed to send error reply for /${interaction.commandName}`, replyErr);
     }
   }
 });
