@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import * as join from './join';
 import * as leave from './leave';
+import * as restart from './restart';
+import * as seek from './seek';
 
 export interface Command {
   data: SlashCommandBuilder;
@@ -10,4 +12,6 @@ export interface Command {
 export const commands: Map<string, Command> = new Map([
   ['join', join as Command],
   ['leave', leave as Command],
+  ['restart', restart as Command],
+  ['seek', seek as Command],
 ]);

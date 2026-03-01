@@ -80,6 +80,53 @@ export async function closeAllGuildSessions(guildId: string): Promise<void> {
   }
 }
 
+export async function getPlaybackPosition(guildId: string): Promise<number> {
+  if (!supabase) return 0;
+
+  const { data, error } = await supabase
+    .from('guild_playback_state')
+    .select('position_seconds')
+    .eq('guild_id', guildId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Supabase] Failed to get playback position:', error.message);
+    return 0;
+  }
+
+  return data?.position_seconds ?? 0;
+}
+
+export async function savePlaybackPosition(guildId: string, positionSeconds: number): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('guild_playback_state')
+    .upsert(
+      { guild_id: guildId, position_seconds: positionSeconds, updated_at: new Date().toISOString() },
+      { onConflict: 'guild_id' }
+    );
+
+  if (error) {
+    console.error('[Supabase] Failed to save playback position:', error.message);
+  }
+}
+
+export async function resetPlaybackPosition(guildId: string): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('guild_playback_state')
+    .upsert(
+      { guild_id: guildId, position_seconds: 0, updated_at: new Date().toISOString() },
+      { onConflict: 'guild_id' }
+    );
+
+  if (error) {
+    console.error('[Supabase] Failed to reset playback position:', error.message);
+  }
+}
+
 export async function logEvent(
   guildId: string,
   eventType: string,

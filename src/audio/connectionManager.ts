@@ -3,23 +3,35 @@ import {
   VoiceConnection,
   VoiceConnectionStatus,
   entersState,
-  AudioPlayer,
 } from '@discordjs/voice';
 import { VoiceBasedChannel } from 'discord.js';
-import { createLoopingPlayer } from './player';
+import { createLoopingPlayer, RadioPlayer } from './player';
 import { logger } from '../logger';
-import { closeSession, closeAllGuildSessions, createSession } from '../supabase';
+import {
+  closeSession,
+  closeAllGuildSessions,
+  createSession,
+  getPlaybackPosition,
+  savePlaybackPosition,
+} from '../supabase';
+
+const POSITION_SAVE_INTERVAL_MS = 30_000;
 
 interface ActiveConnection {
   connection: VoiceConnection;
-  player: AudioPlayer;
+  radioPlayer: RadioPlayer;
   sessionId: string | null;
+  saveInterval: ReturnType<typeof setInterval>;
 }
 
 const connections = new Map<string, ActiveConnection>();
 
 export function isConnected(guildId: string): boolean {
   return connections.has(guildId);
+}
+
+export function getRadioPlayer(guildId: string): RadioPlayer | null {
+  return connections.get(guildId)?.radioPlayer ?? null;
 }
 
 export async function connect(channel: VoiceBasedChannel): Promise<void> {
@@ -47,12 +59,20 @@ export async function connect(channel: VoiceBasedChannel): Promise<void> {
     throw new Error('Timed out while connecting to the voice channel. Please try again.');
   }
 
-  const player = await createLoopingPlayer(guildId);
-  connection.subscribe(player);
+  const savedPosition = await getPlaybackPosition(guildId);
+  logger.info(`guild:${guildId}`, `Resuming playback at ${savedPosition.toFixed(1)}s`);
+
+  const radioPlayer = createLoopingPlayer(guildId, savedPosition);
+  connection.subscribe(radioPlayer.audioPlayer);
 
   const sessionId = await createSession(guildId, channelId, channelName);
 
-  connections.set(guildId, { connection, player, sessionId });
+  const saveInterval = setInterval(() => {
+    const pos = radioPlayer.getCurrentPosition();
+    void savePlaybackPosition(guildId, pos);
+  }, POSITION_SAVE_INTERVAL_MS);
+
+  connections.set(guildId, { connection, radioPlayer, sessionId, saveInterval });
 
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     logger.warn(`guild:${guildId}`, 'Connection disconnected — attempting to recover');
@@ -82,13 +102,21 @@ export async function disconnect(guildId: string): Promise<void> {
     throw new Error('Bot is not connected to a voice channel in this server.');
   }
 
-  entry.player.stop(true);
+  const pos = entry.radioPlayer.getCurrentPosition();
+  await savePlaybackPosition(guildId, pos);
+
+  entry.radioPlayer.destroy();
   entry.connection.destroy();
 }
 
 async function cleanupGuild(guildId: string): Promise<void> {
   const entry = connections.get(guildId);
   if (!entry) return;
+
+  clearInterval(entry.saveInterval);
+
+  const pos = entry.radioPlayer.getCurrentPosition();
+  await savePlaybackPosition(guildId, pos);
 
   connections.delete(guildId);
 
@@ -98,7 +126,7 @@ async function cleanupGuild(guildId: string): Promise<void> {
     await closeAllGuildSessions(guildId);
   }
 
-  logger.info(`guild:${guildId}`, 'Cleaned up connection resources');
+  logger.info(`guild:${guildId}`, `Cleaned up connection resources (saved position: ${pos.toFixed(1)}s)`);
 }
 
 export async function disconnectAll(): Promise<void> {
