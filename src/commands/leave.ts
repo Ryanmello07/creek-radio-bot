@@ -26,9 +26,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.deferReply();
   } catch (err) {
     const code = (err as { code?: number }).code;
-    if (code !== 40060) {
-      throw err;
+    if (code === 10062) {
+      logger.warn(`guild:${guildId}`, 'Interaction expired before deferring /leave');
+      return;
     }
+    logger.warn(`guild:${guildId}`, `deferReply failed for /leave, attempting to continue: ${err instanceof Error ? err.message : err}`);
   }
 
   try {
@@ -36,10 +38,18 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await logger.event(guildId, 'leave', 'Left voice channel', {
       requested_by: interaction.user.tag,
     });
-    await interaction.editReply('Radio stopped. Goodbye!');
+    try {
+      await interaction.editReply('Radio stopped. Goodbye!');
+    } catch (replyErr) {
+      logger.warn(`guild:${guildId}`, `Failed to send success reply for /leave: ${replyErr instanceof Error ? replyErr.message : replyErr}`);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unknown error occurred.';
     logger.error(`guild:${guildId}`, 'Failed to leave voice channel', err);
-    await interaction.editReply(`Failed to leave: ${message}`);
+    try {
+      await interaction.editReply(`Failed to leave: ${message}`);
+    } catch (replyErr) {
+      logger.warn(`guild:${guildId}`, `Failed to send error reply for /leave: ${replyErr instanceof Error ? replyErr.message : replyErr}`);
+    }
   }
 }
