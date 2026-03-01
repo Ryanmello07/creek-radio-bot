@@ -62,7 +62,7 @@ export async function connect(channel: VoiceBasedChannel): Promise<void> {
   const savedPosition = await getPlaybackPosition(guildId);
   logger.info(`guild:${guildId}`, `Resuming playback at ${savedPosition.toFixed(1)}s`);
 
-  const radioPlayer = createLoopingPlayer(guildId, savedPosition);
+  const radioPlayer = await createLoopingPlayer(guildId, savedPosition);
   connection.subscribe(radioPlayer.audioPlayer);
 
   const sessionId = await createSession(guildId, channelId, channelName);
