@@ -3,17 +3,34 @@ import { isConnected, getRadioPlayer } from '../audio/connectionManager';
 import { savePlaybackPosition } from '../supabase';
 import { logger } from '../logger';
 
-function parseTimeString(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
+interface ParsedTime {
+  seconds: number;
+  relative: 'forward' | 'backward' | null;
+}
 
-  if (/^\d+(\.\d+)?$/.test(trimmed)) {
-    return parseFloat(trimmed);
+function parseTimeString(input: string): ParsedTime | null {
+  const trimmed = input.trim().toLowerCase();
+  if (trimmed === '') return null;
+
+  let relative: ParsedTime['relative'] = null;
+  let body = trimmed;
+
+  if (body.startsWith('+')) {
+    relative = 'forward';
+    body = body.slice(1);
+  } else if (body.startsWith('-')) {
+    relative = 'backward';
+    body = body.slice(1);
+  }
+
+  if (/^\d+(\.\d+)?$/.test(body)) {
+    return { seconds: parseFloat(body), relative };
   }
 
   const pattern = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
-  const match = trimmed.match(pattern);
+  const match = body.match(pattern);
 
-  if (!match || trimmed === '') return null;
+  if (!match || body === '') return null;
 
   const hours = parseInt(match[1] || '0', 10);
   const minutes = parseInt(match[2] || '0', 10);
@@ -23,7 +40,7 @@ function parseTimeString(input: string): number | null {
     return null;
   }
 
-  return hours * 3600 + minutes * 60 + seconds;
+  return { seconds: hours * 3600 + minutes * 60 + seconds, relative };
 }
 
 function formatTime(totalSeconds: number): string {
@@ -41,11 +58,11 @@ function formatTime(totalSeconds: number): string {
 
 export const data = new SlashCommandBuilder()
   .setName('seek')
-  .setDescription('Jump to a specific time in the radio')
+  .setDescription('Jump to a specific time or skip forward/back (e.g. +30s, -1m)')
   .addStringOption((option) =>
     option
       .setName('time')
-      .setDescription('Time to jump to (e.g. 10s, 5m, 1h30m, 90)')
+      .setDescription('Time to jump to (1h30m, 90) or relative offset (+30s, -1m)')
       .setRequired(true)
   ) as SlashCommandBuilder;
 
@@ -57,11 +74,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const guildId = interaction.guildId;
   const timeInput = interaction.options.getString('time', true);
-  const seconds = parseTimeString(timeInput);
+  const parsed = parseTimeString(timeInput);
 
-  if (seconds === null || seconds < 0) {
+  if (parsed === null || parsed.seconds < 0) {
     await interaction.reply({
-      content: `Invalid time format: \`${timeInput}\`. Use formats like \`10s\`, \`5m\`, \`1h30m\`, or a number in seconds like \`90\`.`,
+      content: `Invalid time format: \`${timeInput}\`. Use \`10s\`, \`5m\`, \`1h30m\`, \`90\`, or relative like \`+30s\`, \`-1m\`.`,
       ephemeral: true,
     });
     return;
@@ -88,19 +105,43 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   try {
     const radioPlayer = getRadioPlayer(guildId);
-    if (radioPlayer) {
-      radioPlayer.seekTo(seconds);
-    }
-    await savePlaybackPosition(guildId, seconds);
+    let targetSeconds: number;
 
-    const formatted = formatTime(seconds);
+    if (parsed.relative && radioPlayer) {
+      const current = radioPlayer.getCurrentPosition();
+      targetSeconds = parsed.relative === 'forward'
+        ? current + parsed.seconds
+        : current - parsed.seconds;
+    } else {
+      targetSeconds = parsed.seconds;
+    }
+
+    targetSeconds = Math.max(0, targetSeconds);
+
+    if (radioPlayer) {
+      radioPlayer.seekTo(targetSeconds);
+    }
+    await savePlaybackPosition(guildId, targetSeconds);
+
+    const formatted = formatTime(targetSeconds);
+    let replyText: string;
+
+    if (parsed.relative === 'forward') {
+      replyText = `Skipped forward **${formatTime(parsed.seconds)}** to **${formatted}**.`;
+    } else if (parsed.relative === 'backward') {
+      replyText = `Skipped back **${formatTime(parsed.seconds)}** to **${formatted}**.`;
+    } else {
+      replyText = `Jumped to **${formatted}**.`;
+    }
+
     await logger.event(guildId, 'seek', `Jumped to ${formatted}`, {
       requested_by: interaction.user.tag,
-      seek_seconds: seconds,
+      seek_seconds: targetSeconds,
+      relative: parsed.relative,
     });
 
     try {
-      await interaction.editReply(`Jumped to **${formatted}**.`);
+      await interaction.editReply(replyText);
     } catch (replyErr) {
       logger.warn(`guild:${guildId}`, `Failed to send success reply for /seek: ${replyErr instanceof Error ? replyErr.message : replyErr}`);
     }
