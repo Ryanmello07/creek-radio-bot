@@ -107,7 +107,6 @@ export async function createLoopingPlayer(guildId: string, startPositionSeconds 
     });
 
     proc.stdin!.on('error', () => {});
-    proc.stdout!.on('error', () => {});
 
     proc.stderr!.on('data', (chunk: Buffer) => {
       const msg = chunk.toString().trim();
