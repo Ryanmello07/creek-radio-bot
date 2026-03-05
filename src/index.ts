@@ -4,15 +4,18 @@ import { config } from './config';
 import { logger } from './logger';
 import { commands } from './commands';
 import { disconnectAll } from './audio/connectionManager';
+import { closeAllStaleSessions } from './supabase';
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   logger.info('Bot', `Logged in as ${readyClient.user.tag}`);
   logger.info('Bot', `Serving ${readyClient.guilds.cache.size} guild(s)`);
   logger.info('Bot', `Stream URL: ${config.audio.streamUrl}`);
+  await closeAllStaleSessions();
+  logger.info('Bot', 'Closed any stale sessions from previous runs');
 });
 
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -61,5 +64,14 @@ async function shutdown(): Promise<void> {
 
 process.on('SIGINT', () => void shutdown());
 process.on('SIGTERM', () => void shutdown());
+
+process.on('uncaughtException', (err) => {
+  logger.error('Bot', 'Uncaught exception — shutting down gracefully', err);
+  void shutdown();
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Bot', 'Unhandled rejection', reason);
+});
 
 void client.login(config.discord.token);

@@ -80,6 +80,19 @@ export async function closeAllGuildSessions(guildId: string): Promise<void> {
   }
 }
 
+export async function closeAllStaleSessions(): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('bot_sessions')
+    .update({ is_active: false, left_at: new Date().toISOString() })
+    .eq('is_active', true);
+
+  if (error) {
+    console.error('[Supabase] Failed to close stale sessions:', error.message);
+  }
+}
+
 export async function getPlaybackPosition(guildId: string): Promise<number> {
   if (!supabase) return 0;
 
