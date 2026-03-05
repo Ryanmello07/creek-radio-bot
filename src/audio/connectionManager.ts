@@ -52,27 +52,10 @@ export async function connect(channel: VoiceBasedChannel): Promise<void> {
 
   logger.info(`guild:${guildId}`, `Joining voice channel: ${channelName} (${channelId})`);
 
-  try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
-  } catch (err) {
-    connection.destroy();
-    throw new Error('Timed out while connecting to the voice channel. Please try again.');
-  }
-
-  const savedPosition = await getPlaybackPosition(guildId);
-  logger.info(`guild:${guildId}`, `Resuming playback at ${savedPosition.toFixed(1)}s`);
-
-  const radioPlayer = await createLoopingPlayer(guildId, savedPosition);
-  connection.subscribe(radioPlayer.audioPlayer);
-
-  const sessionId = await createSession(guildId, channelId, channelName);
-
-  const saveInterval = setInterval(() => {
-    const pos = radioPlayer.getCurrentPosition();
-    void savePlaybackPosition(guildId, pos);
-  }, POSITION_SAVE_INTERVAL_MS);
-
-  connections.set(guildId, { connection, radioPlayer, sessionId, saveInterval });
+  connection.on('error', (err: Error) => {
+    logger.error(`guild:${guildId}`, 'Voice connection error', err);
+    void cleanupGuild(guildId);
+  });
 
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     logger.warn(`guild:${guildId}`, 'Connection disconnected — attempting to recover');
@@ -92,6 +75,35 @@ export async function connect(channel: VoiceBasedChannel): Promise<void> {
     logger.info(`guild:${guildId}`, 'Voice connection destroyed');
     await cleanupGuild(guildId);
   });
+
+  const MAX_CONNECT_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt++) {
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+      break;
+    } catch {
+      if (attempt === MAX_CONNECT_ATTEMPTS) {
+        connection.destroy();
+        throw new Error('Timed out while connecting to the voice channel. Please try again.');
+      }
+      logger.warn(`guild:${guildId}`, `Connection attempt ${attempt}/${MAX_CONNECT_ATTEMPTS} timed out — retrying`);
+    }
+  }
+
+  const savedPosition = await getPlaybackPosition(guildId);
+  logger.info(`guild:${guildId}`, `Resuming playback at ${savedPosition.toFixed(1)}s`);
+
+  const radioPlayer = await createLoopingPlayer(guildId, savedPosition);
+  connection.subscribe(radioPlayer.audioPlayer);
+
+  const sessionId = await createSession(guildId, channelId, channelName);
+
+  const saveInterval = setInterval(() => {
+    const pos = radioPlayer.getCurrentPosition();
+    void savePlaybackPosition(guildId, pos);
+  }, POSITION_SAVE_INTERVAL_MS);
+
+  connections.set(guildId, { connection, radioPlayer, sessionId, saveInterval });
 
   logger.info(`guild:${guildId}`, `Connected and streaming in: ${channelName}`);
 }
